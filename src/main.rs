@@ -1,5 +1,6 @@
 use clap::Parser;
 use eru::{Args, Command, RenameOptions, create_rename_action, execute_rename, extract_metadata, scan_path};
+use eru::{enrich_file, EnrichConfig, EnrichStatus, WriteConfig};
 use std::path::Path;
 use std::process;
 
@@ -11,6 +12,18 @@ fn main() {
         Command::Rename { path, pattern, execute, no_recursive, space, no_comma } => {
             let opts = RenameOptions { space_char: space, no_comma };
             handle_rename(&path, &pattern, execute, !no_recursive, &opts)
+        }
+        Command::Enrich { path, pattern, execute, min_confidence, out, ebook_meta_cmd,
+                          path_map, no_recursive, space, no_comma } => {
+            let cfg = EnrichConfig {
+                min_confidence,
+                pattern,
+                rename_opts: RenameOptions { space_char: space, no_comma },
+                write: WriteConfig::new(&ebook_meta_cmd, path_map.as_deref()),
+                out_dir: out,
+                execute,
+            };
+            handle_enrich(&path, !no_recursive, &cfg)
         }
         Command::Patterns => {
             handle_patterns();
@@ -147,6 +160,52 @@ fn prompt_conflict(action: &eru::RenameAction) -> ConflictChoice {
             _ => eprintln!("Invalid choice. Please enter y, n, a, or s."),
         }
     }
+}
+
+fn handle_enrich(path: &Path, recursive: bool, cfg: &EnrichConfig) -> eru::Result<()> {
+    let epubs = scan_path(path, recursive)?;
+    if epubs.is_empty() {
+        println!("No EPUB files found.");
+        return Ok(());
+    }
+    if !cfg.execute {
+        println!("(dry-run — pass --execute to write metadata + rename)\n");
+    }
+
+    let (mut done, mut low, mut none, mut nosig, mut errs) = (0, 0, 0, 0, 0);
+    for epub in epubs {
+        let name = epub.file_name().and_then(|n| n.to_str()).unwrap_or("?").to_string();
+        match enrich_file(&epub, cfg) {
+            Ok(o) => {
+                let title = o.record.as_ref().and_then(|r| r.title.clone()).unwrap_or_default();
+                let authors = o.record.as_ref().map(|r| r.authors.join(", ")).unwrap_or_default();
+                match o.status {
+                    EnrichStatus::Applied => {
+                        done += 1;
+                        println!("✓ [{:.2}] {name} -> {}", o.confidence, o.new_name.as_deref().unwrap_or("?"));
+                    }
+                    EnrichStatus::Preview => {
+                        done += 1;
+                        println!("• [{:.2}] {name}", o.confidence);
+                        println!("      set:  {title} — {authors}");
+                        println!("      name: {}", o.new_name.as_deref().unwrap_or("?"));
+                    }
+                    EnrichStatus::LowConfidence => {
+                        low += 1;
+                        println!("? [{:.2}] {name} (below gate {:.2}) — best guess: {title} / {authors}",
+                                 o.confidence, cfg.min_confidence);
+                    }
+                    EnrichStatus::NoMatch => { none += 1; println!("✗ {name} — no online match"); }
+                    EnrichStatus::NoSignals => { nosig += 1; println!("- {name} — no title/author/ISBN to search on"); }
+                }
+            }
+            Err(e) => { errs += 1; eprintln!("! {name}: {e}"); }
+        }
+    }
+
+    let verb = if cfg.execute { "applied" } else { "to apply" };
+    println!("\n{done} {verb}, {low} low-confidence, {none} no-match, {nosig} no-signals, {errs} errors");
+    Ok(())
 }
 
 fn handle_patterns() {

@@ -23,6 +23,15 @@ pub enum EruError {
 
     #[error("Not an EPUB file: {0}")]
     NotAnEpub(PathBuf),
+
+    #[error("Network error: {0}")]
+    Network(String),
+
+    #[error("Metadata provider error: {0}")]
+    Provider(String),
+
+    #[error("External tool error: {0}")]
+    ExternalTool(String),
 }
 
 pub type Result<T> = std::result::Result<T, EruError>;

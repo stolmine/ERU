@@ -51,7 +51,7 @@ fn get_metadata_field(doc: &mut EpubDoc<std::io::BufReader<std::fs::File>>, fiel
         .filter(|s| !s.is_empty())
 }
 
-fn to_lastname_first(name: &str) -> String {
+pub fn to_lastname_first(name: &str) -> String {
     // Already in "Lastname, Firstname" format
     if name.contains(',') {
         return name.to_string();

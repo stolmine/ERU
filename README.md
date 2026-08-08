@@ -94,6 +94,40 @@ eru rename ./books/ -p "{author} - {title}" -s _ --no-comma --execute
 # Result: Smith_Jane_-_The_Great_Novel.epub
 ```
 
+### Enrich Metadata (online lookup)
+
+`rename` only reads what's already in the file. `enrich` goes further: it looks the book up
+online (Open Library — by ISBN if present, else title/author), scores the match, and — when
+confidence clears a gate — **writes the canonical metadata back into the EPUB** and renames it.
+Files below the gate are left untouched and flagged, so a bad guess never silently overwrites a
+book. Dry-run by default.
+
+```bash
+# Preview what would be fetched/written/renamed (dry-run)
+eru enrich ./inbox/
+
+# Apply: write metadata into each EPUB + rename
+eru enrich ./inbox/ --execute
+
+# Tune the auto-apply gate (default 0.75) and the output name
+eru enrich ./inbox/ -p "{author} - {title} ({year})" --min-confidence 0.8 --execute
+
+# Move enriched files into another folder (e.g. a Calibre-Web ingest dir)
+eru enrich ./inbox/ --out /srv/cwa-ingest --execute
+```
+
+Writing uses Calibre's `ebook-meta`. It doesn't have to be on `$PATH` — point `--ebook-meta-cmd`
+at any invocation, and use `--path-map host:container` when it runs inside a container:
+
+```bash
+eru enrich ./inbox/ --execute \
+  --ebook-meta-cmd "docker exec calibre-web-automated /usr/bin/ebook-meta" \
+  --path-map "/mnt/storage/downloads/book-ingest:/cwa-book-ingest"
+```
+
+Reported per file: `✓` applied · `•` dry-run preview · `?` below the confidence gate ·
+`✗` no online match · `-` no title/author/ISBN to search on.
+
 ## Conflict Resolution
 
 When `--execute` encounters an existing file, you'll be prompted:
