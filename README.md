@@ -128,6 +128,12 @@ eru enrich ./inbox/ --execute \
 Reported per file: `✓` applied · `•` dry-run preview · `?` below the confidence gate ·
 `✗` no online match · `-` no title/author/ISBN to search on.
 
+**Formats:** `enrich` handles EPUB (read natively) plus PDF, MOBI, AZW3, AZW, FB2, LRF, PDB,
+PRC, and KEPUB. Non-EPUB formats are read *and* written through `ebook-meta`, so they need
+`--ebook-meta-cmd` set to a working invocation. The output extension always matches the source
+(a `.pdf` stays `.pdf`). Note that PDF/scan metadata is often sparse, so those files more often
+land below the confidence gate than EPUBs do. (`list`/`rename` read EPUB metadata natively.)
+
 ## Conflict Resolution
 
 When `--execute` encounters an existing file, you'll be prompted:

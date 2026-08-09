@@ -22,6 +22,18 @@ impl EpubMetadata {
 }
 
 pub fn extract_metadata(path: &Path) -> Result<EpubMetadata> {
+    // Native reader is EPUB-only. Non-EPUB formats have no embedded reader here — they're read
+    // via `ebook-meta` in the enrich path — so return an empty shell rather than error.
+    let is_epub = path.extension().and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("epub")).unwrap_or(false);
+    if !is_epub {
+        return Ok(EpubMetadata {
+            source_path: path.to_path_buf(),
+            title: None, author: None, publisher: None,
+            date: None, year: None, isbn: None, language: None,
+        });
+    }
+
     let mut doc = EpubDoc::new(path)?;
 
     let title = get_metadata_field(&mut doc, "title");
@@ -68,7 +80,7 @@ pub fn to_lastname_first(name: &str) -> String {
     }
 }
 
-fn extract_year(date_str: &str) -> Option<String> {
+pub fn extract_year(date_str: &str) -> Option<String> {
     const FORMATS: &[&str] = &["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y", "%Y-%m", "%Y/%m"];
 
     for &format in FORMATS {

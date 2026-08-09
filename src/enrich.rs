@@ -11,7 +11,8 @@ use crate::matcher::score;
 use crate::metadata::{extract_metadata, to_lastname_first, EpubMetadata};
 use crate::provider::{openlibrary_by_isbn, openlibrary_search, BookRecord};
 use crate::rename::{generate_filename, RenameOptions};
-use crate::writer::{write_metadata, WriteConfig};
+use crate::scanner::is_epub;
+use crate::writer::{read_via_ebook_meta, write_metadata, WriteConfig};
 use std::path::{Path, PathBuf};
 
 pub struct EnrichConfig {
@@ -41,8 +42,17 @@ pub struct EnrichOutcome {
     pub new_name: Option<String>,
 }
 
+/// Read a file's local signals: EPUB natively, other formats via `ebook-meta`.
+fn read_local(path: &Path, write: &WriteConfig) -> Result<EpubMetadata> {
+    if is_epub(path) {
+        extract_metadata(path)
+    } else {
+        read_via_ebook_meta(path, write)
+    }
+}
+
 pub fn enrich_file(path: &Path, cfg: &EnrichConfig) -> Result<EnrichOutcome> {
-    let local = extract_metadata(path)?;
+    let local = read_local(path, &cfg.write)?;
 
     if !local.has_metadata() && local.isbn.is_none() {
         return Ok(outcome(path, EnrichStatus::NoSignals, 0.0, None, None));

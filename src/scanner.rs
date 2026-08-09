@@ -9,7 +9,7 @@ pub fn scan_path(path: &Path, recursive: bool) -> Result<Vec<PathBuf>> {
 
     let mut epubs = match (path.is_file(), path.is_dir()) {
         (true, _) => {
-            if is_epub(path) {
+            if is_supported(path) {
                 vec![path.to_path_buf()]
             } else {
                 return Err(EruError::NotAnEpub(path.to_path_buf()));
@@ -31,18 +31,34 @@ fn scan_directory(path: &Path, recursive: bool) -> Result<Vec<PathBuf>> {
         .follow_links(false)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file() && is_epub(e.path()))
+        .filter(|e| e.file_type().is_file() && is_supported(e.path()))
         .map(|e| e.into_path())
         .collect();
 
     Ok(epubs)
 }
 
-fn is_epub(path: &Path) -> bool {
+/// Formats ERU will process. EPUB is read natively; the rest are read/written via Calibre's
+/// `ebook-meta` (all appear in its metadata-writing set). Extend this list to add more.
+pub const SUPPORTED_EXTS: &[&str] = &[
+    "epub", "pdf", "mobi", "azw3", "azw", "fb2", "lrf", "pdb", "prc", "kepub",
+];
+
+fn has_ext(path: &Path, exts: &[&str]) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| ext.eq_ignore_ascii_case("epub"))
+        .map(|ext| exts.iter().any(|x| ext.eq_ignore_ascii_case(x)))
         .unwrap_or(false)
+}
+
+/// Is this a book format ERU can process at all?
+pub fn is_supported(path: &Path) -> bool {
+    has_ext(path, SUPPORTED_EXTS)
+}
+
+/// Is this an EPUB (read natively, no external tool needed)?
+pub fn is_epub(path: &Path) -> bool {
+    has_ext(path, &["epub"])
 }
 
 #[cfg(test)]
@@ -71,13 +87,22 @@ mod tests {
     }
 
     #[test]
-    fn test_scan_file_not_epub() {
+    fn test_scan_file_unsupported() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let pdf_path = temp_dir.path().join("test.pdf");
-        fs::write(&pdf_path, b"test").unwrap();
+        let txt_path = temp_dir.path().join("test.txt");
+        fs::write(&txt_path, b"test").unwrap();
 
-        let result = scan_path(&pdf_path, false);
+        let result = scan_path(&txt_path, false);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_is_supported() {
+        assert!(is_supported(Path::new("book.epub")));
+        assert!(is_supported(Path::new("book.pdf")));
+        assert!(is_supported(Path::new("book.MOBI")));
+        assert!(!is_supported(Path::new("book.txt")));
+        assert!(!is_supported(Path::new("book")));
     }
 
     #[test]
@@ -87,7 +112,7 @@ mod tests {
 
         fs::write(dir.join("book1.epub"), b"test").unwrap();
         fs::write(dir.join("book2.EPUB"), b"test").unwrap();
-        fs::write(dir.join("ignore.pdf"), b"test").unwrap();
+        fs::write(dir.join("ignore.txt"), b"test").unwrap();
 
         let mut result = scan_path(dir, false).unwrap();
         result.sort();

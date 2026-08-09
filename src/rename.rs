@@ -41,7 +41,13 @@ pub fn generate_filename(metadata: &EpubMetadata, pattern: &str, opts: &RenameOp
     }
 
     let result = cleanup_filename(&result);
-    format!("{}.epub", result)
+    // Preserve the source file's extension (.pdf stays .pdf, not forced to .epub).
+    let ext = metadata.source_path.extension()
+        .and_then(|e| e.to_str())
+        .filter(|e| !e.is_empty())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_else(|| "epub".to_string());
+    format!("{}.{}", result, ext)
 }
 
 fn try_match_placeholder<'a>(s: &'a str, m: &'a EpubMetadata) -> Option<(&'static str, Option<&'a str>)> {
